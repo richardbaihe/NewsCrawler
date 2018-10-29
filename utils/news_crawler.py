@@ -1,10 +1,12 @@
 # -*- coding:utf-8 -*-
 
-import urllib.request
+import urllib, urllib.request
+from bs4 import BeautifulSoup
+import requests
 import json
 import re
-import lxml.html
-from lxml import etree
+# import lxml.html
+# from lxml import etree
 from random import randint
 from datetime import datetime
 import pandas as pd
@@ -12,30 +14,35 @@ import pandas as pd
 LATEST_COLS = ['title', 'time', 'url']
 LATEST_COLS_C = ['title', 'time', 'url', 'content']
 
-sina_template_url = 'http://roll.news.sina.com.cn/interface/rollnews_ch_out_interface.php' \
-                    '?col=43&spec=&type=&ch=03&k=&offset_page=0&offset_num=0&num={}&asc=&page=1&r=0.{}'
-sohu_template_url = 'http://v2.sohu.com/public-api/feed?scene=CHANNEL&sceneId=15&page=1&size={}'
+# sina_template_url = 'http://roll.news.sina.com.cn/interface/rollnews_ch_out_interface.php' \
+#                     '?col=43&spec=&type=&ch=03&k=&offset_page=0&offset_num=0&num={}&asc=&page=1&r=0.{}'
+# sohu_template_url = 'http://v2.sohu.com/public-api/feed?scene=CHANNEL&sceneId=15&page=1&size={}'
+renmin_template_url = 'http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1'
 xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1'
-nets = ['sina', 'sohu', 'xinhuanet']
+nets = ['sina', 'sohu','renmin', 'xinhuanet']
 
 template_urls = {
-    'sina': sina_template_url,
-    'sohu': sohu_template_url,
+    # 'sina': sina_template_url,
+    # 'sohu': sohu_template_url,
+    'renmin': renmin_template_url,
     'xinhuanet': xinhuanet_template_url
 }
 most_top = {
-    'sina': 6000,
-    'sohu': 1000,
+    # 'sina': 6000,
+    # 'sohu': 1000,
+    'renmin': 1000,
     'xinhuanet': 1000
 }
 latest_news_functions = {
-    'sina': 'get_sina_latest_news',
-    'sohu': 'get_sohu_latest_news',
+    # 'sina': 'get_sina_latest_news',
+    # 'sohu': 'get_sohu_latest_news',
+    'renmin','get_xinhuanet_latest_news',
     'xinhuanet': 'get_xinhuanet_latest_news'
 }
 xpaths = {
-    'sina': '//*[@id="artibody"]/p',
-    'sohu': '//*[@id="mp-editor"]/p',
+    # 'sina': '//*[@id="artibody"]/p',
+    # 'sohu': '//*[@id="mp-editor"]/p',
+    'renmin':'//*[@id="p-detail"]/p',
     'xinhuanet': '//*[@id="p-detail"]/p'
 }
 
@@ -71,74 +78,114 @@ def latest_content(net, url):
     :return: string
         返回新闻的文字内容
     """
-    content = ''
+    data = ''
     try:
-        html = lxml.html.parse(url, parser=etree.HTMLParser(encoding='utf-8'))
-        res = html.xpath(xpaths[net])
-        p_str_list = [etree.tostring(node).strip().decode('utf-8') for node in res]
-        content = '\n'.join(p_str_list)
-        html_content = lxml.html.fromstring(content)
-        content = html_content.text_content()
-        content = re.sub(r'(\r*\n)+', '\n', content)
+        # html = lxml.html.parse(url, parser=etree.HTMLParser(encoding='utf-8'))
+        # res = html.xpath(xpaths[net])
+        # p_str_list = [etree.tostring(node).strip().decode('utf-8') for node in res]
+        # content = '\n'.join(p_str_list)
+        # html_content = lxml.html.fromstring(content)
+        # content = html_content.text_content()
+        r = requests.get(url)
+        content = r.content
+        if net=='renmin':
+            start = content.find(b'<!--text_con-->')
+            end = content.find(b'paper_num')
+            content = content[start:end]
+        soup = BeautifulSoup(content, "html.parser")
+        for t in soup.find_all('p'):
+            data += t.text
+        data = re.sub(r'(\r*\n)+', '\n', data)
     except Exception as e:
         print(e)
-    return content
+    return data
 
 
-def get_sina_latest_news(template_url, top=80, show_content=False):
-    """获取新浪即时财经新闻"""
-    try:
-        url = template_url.format(top, randint(10 ** 15, (10 ** 16) - 1))
-        request = urllib.request.Request(url)
-        data_str = urllib.request.urlopen(request, timeout=10).read()
-        data_str = data_str.decode('gbk')
-        data_str = data_str.split('=')[1][:-1]
-        data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
-        data_str = json.dumps(data_str)
-        data_str = json.loads(data_str)
-        data_str = data_str['list']
-        data = []
-        for r in data_str:
-            rt = datetime.fromtimestamp(r['time'])
-            rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-            row = [r['title'], rt_str, r['url']]
-            if show_content:
-                row.append(latest_content('sina', r['url']))
-            data.append(row)
-        df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
-        return df
-    except Exception as e:
-        print(e)
-
-
-def get_sohu_latest_news(template_url, top=80, show_content=False):
-    """获取搜狐即时财经新闻"""
-    try:
-        url = template_url.format(top)
-        request = urllib.request.Request(url)
-        data_str = urllib.request.urlopen(request, timeout=10).read()
-        data_str = data_str.decode('utf-8')
-        data_str = data_str[1:-1]
-        data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
-        data_str = json.dumps(data_str)
-        data_str = json.loads(data_str)
-        data = []
-        for r in data_str:
-            rt = datetime.fromtimestamp(r['publicTime'] // 1000)
-            rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-            r_url = 'http://www.sohu.com/a/' + str(r['id']) + '_' + str(r['authorId'])
-            row = [r['title'], rt_str, r_url]
-            if show_content:
-                row.append(latest_content('sohu', r_url))
-            data.append(row)
-        df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
-        return df
-    except Exception as e:
-        print(e)
-
+# def get_sina_latest_news(template_url, top=80, show_content=False):
+#     """获取新浪即时财经新闻"""
+#     try:
+#         url = template_url.format(top, randint(10 ** 15, (10 ** 16) - 1))
+#         request = urllib.request.Request(url)
+#         data_str = urllib.request.urlopen(request, timeout=10).read()
+#         data_str = data_str.decode('gbk')
+#         data_str = data_str.split('=')[1][:-1]
+#         data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
+#         data_str = json.dumps(data_str)
+#         data_str = json.loads(data_str)
+#         data_str = data_str['list']
+#         data = []
+#         for r in data_str:
+#             rt = datetime.fromtimestamp(r['time'])
+#             rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
+#             row = [r['title'], rt_str, r['url']]
+#             if show_content:
+#                 row.append(latest_content('sina', r['url']))
+#             data.append(row)
+#         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
+#         return df
+#     except Exception as e:
+#         print(e)
+#
+#
+# def get_sohu_latest_news(template_url, top=80, show_content=False):
+#     """获取搜狐即时财经新闻"""
+#     try:
+#         url = template_url.format(top)
+#         request = urllib.request.Request(url)
+#         data_str = urllib.request.urlopen(request, timeout=10).read()
+#         data_str = data_str.decode('utf-8')
+#         data_str = data_str[1:-1]
+#         data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
+#         data_str = json.dumps(data_str)
+#         data_str = json.loads(data_str)
+#         data = []
+#         for r in data_str:
+#             rt = datetime.fromtimestamp(r['publicTime'] // 1000)
+#             rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
+#             r_url = 'http://www.sohu.com/a/' + str(r['id']) + '_' + str(r['authorId'])
+#             row = [r['title'], rt_str, r_url]
+#             if show_content:
+#                 row.append(latest_content('sohu', r_url))
+#             data.append(row)
+#         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
+#         return df
+#     except Exception as e:
+#         print(e)
+#
 
 def get_xinhuanet_latest_news(template_url, top=80, show_content=False):
     """获取新华网即时财经新闻"""
+    try:
+        num = top
+        pgnum = 1
+        data = []
+        while num / 200 > 0:
+            cnt = (num - 1) % 200 + 1
+            url = template_url.format(pgnum, cnt)
+            pgnum += 1
+            num -= cnt
+            request = urllib.request.Request(url)
+            data_str = urllib.request.urlopen(request, timeout=10).read()
+            data_str = data_str.decode('utf-8')
+            data_str = data_str[1:-1]
+            data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
+            data_str = json.dumps(data_str)
+            data_str = json.loads(data_str)
+            data_str = data_str['data']['list']
+            for r in data_str:
+                rt = datetime.strptime(r['PubTime'], '%Y-%m-%d %H:%M:%S')
+                rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
+                row = [r['Title'], rt_str, r['LinkUrl']]
+                if show_content:
+                    row.append(latest_content('xinhuanet', r['LinkUrl']))
+                data.append(row)
+        df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
+        return df
+    except Exception as e:
+        print(e)
+
+def get_renmin_latest_news(template_url, top=80, show_content=False):
+    """获取人民网即时财经新闻"""
     try:
         num = top
         pgnum = 1
