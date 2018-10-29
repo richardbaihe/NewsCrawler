@@ -5,51 +5,41 @@ from bs4 import BeautifulSoup
 import requests
 import json
 import re
-# import lxml.html
-# from lxml import etree
+from tqdm import tqdm
 from random import randint
 from datetime import datetime
 import pandas as pd
 
 LATEST_COLS = ['title', 'time', 'url']
 LATEST_COLS_C = ['title', 'time', 'url', 'content']
+area_nid = [{"name": "推荐","nid": ["11138933"]},
+            {"name": "政治","nid": ["113352", "11147373", "11148835"]},
+            {"name": "财经","nid": ["115062", "11147664", "1111750"]},
+            {"name": "国际","nid": ["11145724"]},
+            {"name": "网评","nid": ["11145723"]},
+            {"name": "图片","nid": ["11145722"]},
+            {"name": "社会","nid": ["113321"]},
+            {"name": "法治","nid": ["113207"]},
+            {"name": "地方","nid": ["113322"]},
+            {"name": "娱乐","nid": ["116716"]}]
 
-# sina_template_url = 'http://roll.news.sina.com.cn/interface/rollnews_ch_out_interface.php' \
-#                     '?col=43&spec=&type=&ch=03&k=&offset_page=0&offset_num=0&num={}&asc=&page=1&r=0.{}'
-# sohu_template_url = 'http://v2.sohu.com/public-api/feed?scene=CHANNEL&sceneId=15&page=1&size={}'
-renmin_template_url = 'http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1'
-xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1'
-nets = ['sina', 'sohu','renmin', 'xinhuanet']
+xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid={}&pgnum={}&cnt={}&tp=1&orderby=1'
+nets = ['xinhuanet']
 
 template_urls = {
-    # 'sina': sina_template_url,
-    # 'sohu': sohu_template_url,
-    'renmin': renmin_template_url,
     'xinhuanet': xinhuanet_template_url
 }
-most_top = {
-    # 'sina': 6000,
-    # 'sohu': 1000,
-    'renmin': 1000,
-    'xinhuanet': 1000
-}
 latest_news_functions = {
-    # 'sina': 'get_sina_latest_news',
-    # 'sohu': 'get_sohu_latest_news',
-    'renmin','get_xinhuanet_latest_news',
     'xinhuanet': 'get_xinhuanet_latest_news'
 }
 xpaths = {
-    # 'sina': '//*[@id="artibody"]/p',
-    # 'sohu': '//*[@id="mp-editor"]/p',
-    'renmin':'//*[@id="p-detail"]/p',
     'xinhuanet': '//*[@id="p-detail"]/p'
 }
 
 
-def get_latest_news(net, top=80, show_content=False):
+def get_latest_news(net, conn_cursor, show_content=False):
     """
-    获取即时财经新闻（新浪、搜狐、新华网）
+    获取即时新闻（新浪、搜狐、新华网）
     :param net: string，指定网站名
     :param top: 数值，显示最新消息的条数，默认为80条
     :param show_content: 是否显示新闻内容，默认False
@@ -60,14 +50,17 @@ def get_latest_news(net, top=80, show_content=False):
         content: 新闻内容（在show_content为True的情况下出现）
     """
     assert net in nets, '参数1(net)错误！应为' + '、'.join(nets) + '中的一个！'
-    most_top_num = most_top[net]
-    if top > most_top_num:
-        print('top>{}，将获取{}条即时财经新闻'.format(most_top_num, most_top_num))
-        top = most_top_num
-    latest_news_function = latest_news_functions[net]
+    #latest_news_function = latest_news_functions[net]
     template_url = template_urls[net]
-    df = eval('{}(\'{}\',{},{})'.format(latest_news_function, template_url, top, show_content))
-    return df
+    df_all = []
+    for an in area_nid:
+        area = an['name']
+        for nid in an['nid']:
+            print('crawling {} from {}...'.format(nid,area))
+            df = get_xinhuanet_latest_news(template_url, area, nid, conn_cursor)
+            df_all.append(df)
+    df_all = pd.concat(df_all)
+    return df_all
 
 
 def latest_content(net, url):
@@ -80,12 +73,6 @@ def latest_content(net, url):
     """
     data = ''
     try:
-        # html = lxml.html.parse(url, parser=etree.HTMLParser(encoding='utf-8'))
-        # res = html.xpath(xpaths[net])
-        # p_str_list = [etree.tostring(node).strip().decode('utf-8') for node in res]
-        # content = '\n'.join(p_str_list)
-        # html_content = lxml.html.fromstring(content)
-        # content = html_content.text_content()
         r = requests.get(url)
         content = r.content
         if net=='renmin':
@@ -97,119 +84,49 @@ def latest_content(net, url):
             data += t.text
         data = re.sub(r'(\r*\n)+', '\n', data)
     except Exception as e:
-        print(e)
-    return data
+        return e, -1
+    return data, 1
 
 
-# def get_sina_latest_news(template_url, top=80, show_content=False):
-#     """获取新浪即时财经新闻"""
-#     try:
-#         url = template_url.format(top, randint(10 ** 15, (10 ** 16) - 1))
-#         request = urllib.request.Request(url)
-#         data_str = urllib.request.urlopen(request, timeout=10).read()
-#         data_str = data_str.decode('gbk')
-#         data_str = data_str.split('=')[1][:-1]
-#         data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
-#         data_str = json.dumps(data_str)
-#         data_str = json.loads(data_str)
-#         data_str = data_str['list']
-#         data = []
-#         for r in data_str:
-#             rt = datetime.fromtimestamp(r['time'])
-#             rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-#             row = [r['title'], rt_str, r['url']]
-#             if show_content:
-#                 row.append(latest_content('sina', r['url']))
-#             data.append(row)
-#         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
-#         return df
-#     except Exception as e:
-#         print(e)
-#
-#
-# def get_sohu_latest_news(template_url, top=80, show_content=False):
-#     """获取搜狐即时财经新闻"""
-#     try:
-#         url = template_url.format(top)
-#         request = urllib.request.Request(url)
-#         data_str = urllib.request.urlopen(request, timeout=10).read()
-#         data_str = data_str.decode('utf-8')
-#         data_str = data_str[1:-1]
-#         data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
-#         data_str = json.dumps(data_str)
-#         data_str = json.loads(data_str)
-#         data = []
-#         for r in data_str:
-#             rt = datetime.fromtimestamp(r['publicTime'] // 1000)
-#             rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-#             r_url = 'http://www.sohu.com/a/' + str(r['id']) + '_' + str(r['authorId'])
-#             row = [r['title'], rt_str, r_url]
-#             if show_content:
-#                 row.append(latest_content('sohu', r_url))
-#             data.append(row)
-#         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
-#         return df
-#     except Exception as e:
-#         print(e)
-#
-
-def get_xinhuanet_latest_news(template_url, top=80, show_content=False):
-    """获取新华网即时财经新闻"""
+def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
+    """获取新华网即时新闻"""
     try:
-        num = top
+        conn,cursor = conn_cursor
         pgnum = 1
         data = []
-        while num / 200 > 0:
-            cnt = (num - 1) % 200 + 1
-            url = template_url.format(pgnum, cnt)
+        while True:
+            cnt = 100
+            url = template_url.format(nid, pgnum, cnt)
             pgnum += 1
-            num -= cnt
             request = urllib.request.Request(url)
             data_str = urllib.request.urlopen(request, timeout=10).read()
             data_str = data_str.decode('utf-8')
             data_str = data_str[1:-1]
             data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
+            if data_str['status']==-1:
+                break
             data_str = json.dumps(data_str)
             data_str = json.loads(data_str)
             data_str = data_str['data']['list']
-            for r in data_str:
+            for r in tqdm(data_str):
                 rt = datetime.strptime(r['PubTime'], '%Y-%m-%d %H:%M:%S')
                 rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-                row = [r['Title'], rt_str, r['LinkUrl']]
-                if show_content:
-                    row.append(latest_content('xinhuanet', r['LinkUrl']))
-                data.append(row)
-        df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
-        return df
-    except Exception as e:
-        print(e)
-
-def get_renmin_latest_news(template_url, top=80, show_content=False):
-    """获取人民网即时财经新闻"""
-    try:
-        num = top
-        pgnum = 1
-        data = []
-        while num / 200 > 0:
-            cnt = (num - 1) % 200 + 1
-            url = template_url.format(pgnum, cnt)
-            pgnum += 1
-            num -= cnt
-            request = urllib.request.Request(url)
-            data_str = urllib.request.urlopen(request, timeout=10).read()
-            data_str = data_str.decode('utf-8')
-            data_str = data_str[1:-1]
-            data_str = eval(data_str, type('Dummy', (dict,), dict(__getitem__=lambda s, n: n))())
-            data_str = json.dumps(data_str)
-            data_str = json.loads(data_str)
-            data_str = data_str['data']['list']
-            for r in data_str:
-                rt = datetime.strptime(r['PubTime'], '%Y-%m-%d %H:%M:%S')
-                rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-                row = [r['Title'], rt_str, r['LinkUrl']]
-                if show_content:
-                    row.append(latest_content('xinhuanet', r['LinkUrl']))
-                data.append(row)
+                row = [r['LinkUrl'], rt_str, r['Title']]
+                content, status = latest_content('xinhuanet', r['LinkUrl'])
+                content = content.replace('\'', '\\\'')
+                if status == -1:
+                    cursor.execute("insert into xinhua_log values ('%s','%s','%s')" % (
+                        area, row[0], content))
+                else:
+                    row.append(content)
+                    data.append(row)
+                    cursor.execute(
+                        "insert into xinhua values ('%s','%s','%s','%s','%s')" % (
+                            area, row[0], row[1], row[2], row[3]))
+                conn.commit()
+            cursor.execute('select count(*) from xinhua')
+            count = cursor.fetchall()
+            print(str(count[0][0]) + ' news found')
         df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
         return df
     except Exception as e:
