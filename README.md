@@ -1,10 +1,89 @@
 # NewsCrawler
-新闻爬虫，爬取新浪、搜狐、新华网即时财经新闻。
+新闻爬虫，爬取新华网即时新闻。
 
-### 新浪、搜狐、新华网财经新闻的API分别为：
+### 新华网财经新闻的API为
 ```python
-sina_template_url = 'http://roll.news.sina.com.cn/interface/rollnews_ch_out_interface.php' \
-                    '?col=43&spec=&type=&ch=03&k=&offset_page=0&offset_num=0&num={}&asc=&page=1&r=0.{}'
-sohu_template_url = 'http://v2.sohu.com/public-api/feed?scene=CHANNEL&sceneId=15&page=1&size={}'
-xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1'
+xinhuanet_template_url = "http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum={}&cnt={}&tp=1&orderby=1"
 ```
+
+## 新华网各类新闻API
+
+            var recommendArr = [ 
+                {
+                    "name": "recom",
+                    "nid": "11138933"
+                },
+                {
+                    "name": "politics",
+                    "nid": ["113352", "11147373", "11148835"]
+                },
+                {
+                    "name": "fortune",
+                    "nid": ["115062", "11147664", "1111750"]
+                },
+                {
+                    "name": "国际",
+                    "nid": "11145724"
+                },
+                {
+                    "name": "网评",
+                    "nid": "11145723"
+                },
+                {
+                    "name": "图片",
+                    "nid": "11145722"
+                },
+                {
+                    "name": "社会",
+                    "nid": "113321"
+                },
+                {
+                    "name": "法治",
+                    "nid": "113207"
+                },
+                {
+                    "name": "local",
+                    "nid": "113322"
+                },
+               {
+                    "name": "ent",
+                    "nid": "116716"
+                }
+            ];
+## 创建数据库
+
+```mysql
+create database news;
+use news;
+drop table if exists xinhua;
+create table xinhua(
+Area char(200),
+Url char(200),
+Time varchar(100),
+Title varchar(1000),
+Content MEDIUMTEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+select * from xinhua;
+```
+
+```mysql
+drop table if exists xinhua_log;
+CREATE table xinhua_log(
+    Area char(200),
+	Url char(200),	#网址
+	Error varchar(500) #错误信息
+)ENGINE=InnoDB default charset=utf8;
+SELECT * from xinhua_log;
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
