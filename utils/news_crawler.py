@@ -94,6 +94,8 @@ def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
         conn,cursor = conn_cursor
         pgnum = 1
         data = []
+        cursor.execute('select a.Url from xinhua a')
+        visited_url = set(cursor.fetchall())
         while True:
             cnt = 100
             url = template_url.format(nid, pgnum, cnt)
@@ -111,8 +113,14 @@ def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
             for r in tqdm(data_str):
                 rt = datetime.strptime(r['PubTime'], '%Y-%m-%d %H:%M:%S')
                 rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
+                if r['LinkUrl'] in visited_url:
+                    continue
+                else:
+                    visited_url.add(r['LinkUrl'])
                 row = [r['LinkUrl'], rt_str, r['Title']]
                 content, status = latest_content('xinhuanet', r['LinkUrl'])
+                if len(content) < len(r['Title']):
+                    continue
                 content = content.replace('\'', '\\\'')
                 if status == -1:
                     cursor.execute("insert into xinhua_log values ('%s','%s','%s')" % (
@@ -127,7 +135,7 @@ def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
             cursor.execute('select count(*) from xinhua')
             count = cursor.fetchall()
             print(str(count[0][0]) + ' news found')
-        df = pd.DataFrame(data, columns=LATEST_COLS_C if show_content else LATEST_COLS)
+        df = pd.DataFrame(data, columns=LATEST_COLS_C)
         return df
     except Exception as e:
         print(e)
