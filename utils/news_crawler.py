@@ -11,7 +11,7 @@ from datetime import datetime
 import pandas as pd
 
 LATEST_COLS_C = ['url', 'time', 'title', 'content']
-nids = [113352]#list(range(11145719,11145740))+[11138933]
+nids = list(range(11145719,11145740))+[11138933]
 
 xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid={}&pgnum={}&cnt={}&tp=1&orderby=1'
 nets = ['xinhuanet']
