@@ -10,18 +10,8 @@ from random import randint
 from datetime import datetime
 import pandas as pd
 
-LATEST_COLS = ['title', 'time', 'url']
-LATEST_COLS_C = ['title', 'time', 'url', 'content']
-area_nid = [{"name": "推荐","nid": ["11138933"]},
-            {"name": "政治","nid": ["113352", "11147373", "11148835"]},
-            {"name": "财经","nid": ["115062", "11147664", "1111750"]},
-            {"name": "国际","nid": ["11145724"]},
-            {"name": "网评","nid": ["11145723"]},
-            {"name": "图片","nid": ["11145722"]},
-            {"name": "社会","nid": ["113321"]},
-            {"name": "法治","nid": ["113207"]},
-            {"name": "地方","nid": ["113322"]},
-            {"name": "娱乐","nid": ["116716"]}]
+LATEST_COLS_C = ['url', 'time', 'title', 'content']
+nids = [113352]#list(range(11145719,11145740))+[11138933]
 
 xinhuanet_template_url = 'http://qc.wa.news.cn/nodeart/list?nid={}&pgnum={}&cnt={}&tp=1&orderby=1'
 nets = ['xinhuanet']
@@ -53,12 +43,11 @@ def get_latest_news(net, conn_cursor, show_content=False):
     #latest_news_function = latest_news_functions[net]
     template_url = template_urls[net]
     df_all = []
-    for an in area_nid:
-        area = an['name']
-        for nid in an['nid']:
-            print('crawling {} from {}...'.format(nid,area))
-            df = get_xinhuanet_latest_news(template_url, area, nid, conn_cursor)
-            df_all.append(df)
+    for nid in nids:
+        nid = str(nid)
+        print('crawling from nid {}...'.format(nid))
+        df = get_xinhuanet_latest_news(template_url, nid, conn_cursor)
+        df_all.append(df)
     df_all = pd.concat(df_all)
     return df_all
 
@@ -88,7 +77,7 @@ def latest_content(net, url):
     return data, 1
 
 
-def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
+def get_xinhuanet_latest_news(template_url, nid, conn_cursor):
     """获取新华网即时新闻"""
     try:
         conn,cursor = conn_cursor
@@ -113,10 +102,8 @@ def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
             for r in tqdm(data_str):
                 rt = datetime.strptime(r['PubTime'], '%Y-%m-%d %H:%M:%S')
                 rt_str = datetime.strftime(rt, '%Y-%m-%d %H:%M')
-                if r['LinkUrl'] in visited_url:
+                if (r['LinkUrl'],) in visited_url:
                     continue
-                else:
-                    visited_url.add(r['LinkUrl'])
                 row = [r['LinkUrl'], rt_str, r['Title']]
                 content, status = latest_content('xinhuanet', r['LinkUrl'])
                 if len(content) < len(r['Title']):
@@ -124,13 +111,14 @@ def get_xinhuanet_latest_news(template_url,area, nid, conn_cursor):
                 content = content.replace('\'', '\\\'')
                 if status == -1:
                     cursor.execute("insert into xinhua_log values ('%s','%s','%s')" % (
-                        area, row[0], content))
+                        nid, row[0], content))
                 else:
+                    visited_url.add(r['LinkUrl'])
                     row.append(content)
                     data.append(row)
                     cursor.execute(
                         "insert into xinhua values ('%s','%s','%s','%s','%s')" % (
-                            area, row[0], row[1], row[2], row[3]))
+                            nid, row[0], row[1], row[2], row[3]))
                 conn.commit()
             cursor.execute('select count(*) from xinhua')
             count = cursor.fetchall()
